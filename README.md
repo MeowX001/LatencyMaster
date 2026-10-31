@@ -2,6 +2,7 @@
 
 A small Windows network latency and packet-loss monitor built with C# and WinUI 3.
 
+<img width="1917" height="1007" alt="Screenshot 2026-10-31 183249" src="https://github.com/user-attachments/assets/f1744d5a-43ff-4ec6-af03-d2849a6bc53e" />
 
 ## Run it in Visual Studio
 
