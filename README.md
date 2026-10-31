@@ -1,6 +1,7 @@
 # Latency Master
 
-A small Windows network latency monitor built with C# and WinUI 3.
+A small Windows network latency and packet-loss monitor built with C# and WinUI 3.
+
 
 ## Run it in Visual Studio
 
@@ -26,3 +27,4 @@ The runnable app is `artifacts\release-v2\LatencyMaster.exe`. Keep the other fil
 - ICMP may be blocked by a host or network even while its website is available.
 - TCP results measure connection setup to the selected port; HTTPS results measure time to response headers.
 - This is an early prototype. The target list is persistent, while latency history is kept for the current session.
+- It saves the configuration in a .json file under appdata folder. C:\Users\{username}\AppData\Local\LatencyMaster
