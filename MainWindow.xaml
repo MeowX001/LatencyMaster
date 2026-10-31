@@ -7,7 +7,8 @@
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
-    <Grid Background="#101214" Margin="30">
+    <Grid Background="#101214">
+      <Grid Margin="30">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -30,13 +31,15 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="52" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="160" />
                 <ColumnDefinition Width="190" />
                 <ColumnDefinition Width="120" />
                 <ColumnDefinition Width="104" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="1" Text="TARGET" FontSize="11" FontWeight="SemiBold" Foreground="#777F87" />
-            <TextBlock Grid.Column="2" Text="RECENT HISTORY" FontSize="11" FontWeight="SemiBold" Foreground="#777F87" />
-            <TextBlock Grid.Column="3" Text="LATEST" FontSize="11" FontWeight="SemiBold" Foreground="#777F87" HorizontalAlignment="Right" />
+            <TextBlock Grid.Column="2" Text="PACKETS" FontSize="11" FontWeight="SemiBold" Foreground="#777F87" />
+            <TextBlock Grid.Column="3" Text="RECENT HISTORY" FontSize="11" FontWeight="SemiBold" Foreground="#777F87" />
+            <TextBlock Grid.Column="4" Text="LATEST" FontSize="11" FontWeight="SemiBold" Foreground="#777F87" HorizontalAlignment="Right" />
         </Grid>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
@@ -59,5 +62,6 @@
                 </ComboBox>
             </StackPanel>
         </Grid>
+      </Grid>
     </Grid>
 </Window>

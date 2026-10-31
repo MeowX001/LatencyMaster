@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     };
     private int _intervalSeconds = 1;
     private TargetEntry? _gatewayTarget;
+    private bool _settingsReady;
 
     public MainWindow()
     {
@@ -33,6 +34,7 @@ public sealed partial class MainWindow : Window
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "LatencyMaster", "targets.json");
         LoadTargets();
+        _settingsReady = true;
         RenderTargets();
         Closed += (_, _) => _shutdown.Cancel();
         _ = PollLoopAsync(_shutdown.Token);
@@ -45,7 +47,19 @@ public sealed partial class MainWindow : Window
         {
             if (File.Exists(_settingsPath))
             {
-                var saved = JsonSerializer.Deserialize<List<TargetSettings>>(File.ReadAllText(_settingsPath));
+                using var document = JsonDocument.Parse(File.ReadAllText(_settingsPath));
+                List<TargetSettings>? saved;
+                if (document.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    // Migrate the target-list-only format used by earlier builds.
+                    saved = JsonSerializer.Deserialize<List<TargetSettings>>(document.RootElement.GetRawText());
+                }
+                else
+                {
+                    var settings = JsonSerializer.Deserialize<AppSettings>(document.RootElement.GetRawText());
+                    saved = settings?.Targets;
+                    if (settings is not null) SelectInterval(settings.IntervalSeconds);
+                }
                 if (saved is { Count: > 0 })
                 {
                     foreach (var item in saved)
@@ -79,7 +93,10 @@ public sealed partial class MainWindow : Window
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
             var data = _targets.Where(t => !t.IsGateway).Select(t => new TargetSettings(t.Name, t.Host, t.Protocol, t.Port)).ToList();
-            File.WriteAllText(_settingsPath, JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
+            var settings = new AppSettings(_intervalSeconds, data);
+            var temporaryPath = _settingsPath + ".tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temporaryPath, _settingsPath, true);
         }
         catch (Exception ex)
         {
@@ -101,6 +118,8 @@ public sealed partial class MainWindow : Window
                 {
                     foreach (var result in results)
                     {
+                        result.Target.SentPackets++;
+                        if (result.LatencyMs.HasValue) result.Target.ReceivedPackets++;
                         result.Target.LatencyMs = result.LatencyMs;
                         result.Target.ResolvedIp = result.ResolvedIp;
                         result.Target.Status = result.Status;
@@ -188,6 +207,7 @@ public sealed partial class MainWindow : Window
             };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(104) });
@@ -213,8 +233,21 @@ public sealed partial class MainWindow : Window
             Grid.SetColumn(labels, 1);
             row.Children.Add(labels);
 
+            var lost = target.SentPackets - target.ReceivedPackets;
+            var lossPercent = target.SentPackets == 0 ? 0 : (double)lost * 100 / target.SentPackets;
+            var packets = new TextBlock
+            {
+                Text = $"Sent: {target.SentPackets:N0}\nReceived: {target.ReceivedPackets:N0}\nLost: {lost:N0} ({lossPercent:0.#}%)",
+                FontSize = 12,
+                LineHeight = 18,
+                Foreground = lost == 0 ? Brush("#B7C0C5") : Brush("#E7A442"),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(packets, 2);
+            row.Children.Add(packets);
+
             var spark = new TextBlock { Text = BuildSparkline(target.History), FontSize = 22, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"), Foreground = Brush("#647079"), VerticalAlignment = VerticalAlignment.Center, CharacterSpacing = 30 };
-            Grid.SetColumn(spark, 2);
+            Grid.SetColumn(spark, 3);
             row.Children.Add(spark);
 
             var latency = new TextBlock
@@ -227,7 +260,7 @@ public sealed partial class MainWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Right,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
-            Grid.SetColumn(latency, 3);
+            Grid.SetColumn(latency, 4);
             row.Children.Add(latency);
 
             if (!target.IsGateway)
@@ -243,7 +276,7 @@ public sealed partial class MainWindow : Window
                     SaveTargets();
                     RenderTargets();
                 }));
-                Grid.SetColumn(actions, 4);
+                Grid.SetColumn(actions, 5);
                 row.Children.Add(actions);
             }
 
@@ -288,7 +321,20 @@ public sealed partial class MainWindow : Window
     private void IntervalCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IntervalCombo.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out var seconds))
+        {
             _intervalSeconds = seconds;
+            if (_settingsReady) SaveTargets();
+        }
+    }
+
+    private void SelectInterval(int seconds)
+    {
+        var items = IntervalCombo.Items.OfType<ComboBoxItem>().ToList();
+        var index = items.FindIndex(item => int.TryParse(item.Tag?.ToString(), out var value) && value == seconds);
+        if (index >= 0)
+            IntervalCombo.SelectedIndex = index;
+        else
+            _intervalSeconds = 1;
     }
 
     private Button CreateActionButton(string content, string tooltip, bool isDisabled, Action action)
@@ -417,11 +463,14 @@ public sealed partial class MainWindow : Window
         public bool IsGateway { get; } = isGateway;
         public string? ResolvedIp { get; set; }
         public long? LatencyMs { get; set; }
+        public long SentPackets { get; set; }
+        public long ReceivedPackets { get; set; }
         public string Status { get; set; } = "Checking…";
         public Queue<long> History { get; } = new();
     }
 
     private sealed record TargetSettings(string Name, string Host, ProbeProtocol Protocol, int Port);
+    private sealed record AppSettings(int IntervalSeconds, List<TargetSettings> Targets);
     private sealed record ProbeResult(TargetEntry Target, long? LatencyMs, string? ResolvedIp, string Status);
     private enum ProbeProtocol { Icmp, Tcp, Https }
 }
